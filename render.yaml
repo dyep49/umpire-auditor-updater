@@ -5,4 +5,16 @@ databases:
     plan: free
     databaseName: umpire_auditor_prod
     postgresMajorVersion: 14
+  # Updater cron job
 
+services:
+  - type: cron
+    name: updater
+    region: oregon
+    env: docker
+    envVars:
+      - key: DB_URL
+        fromDatabase:
+          name: umpire_auditor_prod
+          property: connectionString
+    schedule: '*/5 * * * *'

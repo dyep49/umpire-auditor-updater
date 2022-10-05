@@ -1,0 +1,5 @@
+mlb-statsapi
+requests
+pandas
+psycopg
+pypika
