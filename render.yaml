@@ -17,4 +17,4 @@ services:
         fromDatabase:
           name: umpire_auditor_prod
           property: connectionString
-    schedule: '*/5 14-23,0-8 * 3-11 *'
+    schedule: '*/5 16-23,0-8 * 3-11 *'
