@@ -1,8 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding: utf-8
 
 #%% Import Libraries
 import statsapi
+import logging
 import requests
 import pandas as pd
 import math
@@ -11,6 +12,9 @@ import os
 import psycopg
 from pypika import PostgreSQLQuery, Table
 import dataclasses
+import sys
+import argparse
+
 from pitch import Pitch
 from game import Game
 from umpire import Umpire
@@ -18,9 +22,15 @@ from player import Player
 from team import Team
 from ejection import Ejection
 
+# Config logging
+logger = logging.getLogger('umpireauditor')
+logger.setLevel(logging.DEBUG)
 
-pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', None)
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 #%% Conn String
 
@@ -211,9 +221,6 @@ def add_pitches(game_data):
                     pitch['blown_strikeout'] = True if pitch['strikes'] == 2 else False 
                     pitch['possible_bad_data'] = pitch['total_miss_in'] > 7
             
-                if pitch['start_seconds_home'] == 11338:
-                    print(pitch['home_away_benefit'])
-
             game_pitches.append(pitch)
             
             for event in play_events:
@@ -501,6 +508,7 @@ def add_game_to_db(game_id):
         cur.execute(db_game_query)
         
         if len(df_pitches) != 0:
+            logger.debug("Upserting %s pitches", len(df_pitches))
             cur.execute(db_pitch_query)
         
         if len(ejection_list) != 0:
@@ -521,13 +529,19 @@ def umpire_auditor(sdate=date.today(), edate=date.today()):
     game_ids = []
 
     for d in dates:
-        print(d)
+        logger.debug('Finding games from date: %s', d)
         sched = statsapi.schedule(date=d)
         date_game_ids = [game['game_id'] for game in sched]
         game_ids = game_ids + date_game_ids
 
     for gid in game_ids:
-        print(gid)
+        logger.debug('Processing game id: %s', gid)
         add_game_to_db(gid)
 
-umpire_auditor(date.today(), date.today())
+parser = argparse.ArgumentParser()
+
+parser.add_argument("-sdate", "--start-date", help="Start of date range to update", type=date.fromisoformat, default=date.today())
+parser.add_argument("-edate", "--end-date", help="End of date range to update", type=date.fromisoformat, default=date.today())
+
+args = parser.parse_args()
+umpire_auditor(args.start_date, args.end_date)
