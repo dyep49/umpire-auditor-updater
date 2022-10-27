@@ -8,6 +8,7 @@ import requests
 import pandas as pd
 import math
 from datetime import date, timedelta, datetime
+from zoneinfo import ZoneInfo
 import os
 import psycopg
 from pypika import PostgreSQLQuery, Table
@@ -517,7 +518,7 @@ def add_game_to_db(game_id):
 
 #%% Umpire Auditor
 
-def umpire_auditor(sdate=date.today(), edate=date.today()):
+def umpire_auditor(sdate, edate):
     delta = edate - sdate
 
     dates = []
@@ -544,4 +545,15 @@ parser.add_argument("-sdate", "--start-date", help="Start of date range to updat
 parser.add_argument("-edate", "--end-date", help="End of date range to update", type=date.fromisoformat, default=date.today())
 
 args = parser.parse_args()
-umpire_auditor(args.start_date, args.end_date)
+
+today = datetime.utcnow().replace(tzinfo=ZoneInfo("America/Los_Angeles")).date()
+sdate = today
+edate = today
+
+if args.start_date:
+    sdate = args.start_date
+
+if args.end_date:
+    edate = args.end_date
+
+umpire_auditor(sdate, edate)
