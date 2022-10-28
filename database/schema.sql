@@ -82,7 +82,7 @@ CREATE TABLE "players" (
 );
 
 CREATE TABLE "ejections" (
-  "id" int UNIQUE NOT NULL,
+  "id" varchar UNIQUE NOT NULL,
   "game_date" date,
   "game_id" int,
   "description" varchar,
@@ -144,8 +144,8 @@ begin
              'description', NEW.description,
              'home_timestamp', NEW.timestamp_start_home,
 			       'away_timestamp', NEW.timestamp_start_away,
-						 'start_seconds_home', NEW.timestamp_start_seconds_home,
-						 'start_seconds_away', NEW.timestamp_start_seconds_away
+						 'start_seconds_home', NEW.start_seconds_home,
+						 'start_seconds_away', NEW.start_seconds_away
            )::text);
     end if;
  

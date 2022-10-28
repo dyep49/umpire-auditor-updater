@@ -15,6 +15,7 @@ from pypika import PostgreSQLQuery, Table
 import dataclasses
 import sys
 import argparse
+import hashlib
 
 from pitch import Pitch
 from game import Game
@@ -292,7 +293,7 @@ def add_game_data(pitch, game_data):
 
 #%% Add Ejection Data
 def add_game_ejection_data(ejection, game_data):
-    ejection['id'] = str(game_data['game_id']) + str(game_data['umpire_id']) + str(ejection['player_id'])
+    ejection['id'] = hashlib.sha256((str(game_data['game_id']) + str(game_data['umpire_id']) + str(ejection['player_id'])).encode('utf-8')).hexdigest()
     ejection['umpire_id'] = game_data['umpire_id']
     ejection['umpire_name'] = game_data['umpire_name']
     ejection['game_id'] = game_data['game_id']
