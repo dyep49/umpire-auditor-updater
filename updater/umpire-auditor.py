@@ -450,7 +450,6 @@ def add_game_to_db(game_id):
         ejection_queries.append(dataclass_upsert_query('ejections', [ejection_obj], Ejection))
     
     db_ejection_query = ';'.join(ejection_queries)
-    
 
 #%%# Create Game
 
@@ -516,6 +515,17 @@ def add_game_to_db(game_id):
         if len(ejection_list) != 0:
             cur.execute(db_ejection_query)
 
+#%% Cull ghost pitches
+    with psycopg.connect(conn_string, autocommit=True) as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT id from pitches WHERE game_id=' + str(game_id))
+        db_ids = [r[0] for r in cur.fetchall()]
+	
+        diff_play_ids = [id for id in db_ids if id not in df_pitches['id'].to_list()]
+
+        if len(diff_play_ids) > 0:
+            logger.debug('Deleting pitch ids: %s', diff_play_ids)
+            cur.execute('DELETE FROM pitches WHERE id IN (%s)', diff_play_ids)
 
 #%% Umpire Auditor
 
@@ -547,7 +557,7 @@ parser.add_argument("-edate", "--end-date", help="End of date range to update", 
 
 args = parser.parse_args()
 
-today = datetime.utcnow().replace(tzinfo=ZoneInfo("America/Los_Angeles")).date()
+today = datetime.now(tz=ZoneInfo("America/Los_Angeles")).date()
 sdate = today
 edate = today
 
