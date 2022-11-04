@@ -535,7 +535,7 @@ def umpire_auditor(sdate, edate):
     dates = []
 
     for i in range(delta.days + 1):
-        day = sdate + timedelta(days=i)
+        day = sdate + timedelta(days=(i - 1))
         dates.append(day)
 
     game_ids = []
