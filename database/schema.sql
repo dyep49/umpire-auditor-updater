@@ -1,4 +1,4 @@
-CREATE TABLE "pitches" (
+CREATE TABLE "pitch" (
   "id" varchar UNIQUE,
   "game_date" date,
   "play_description" varchar,
@@ -47,18 +47,18 @@ CREATE TABLE "pitches" (
   "updated_at" timestamp
 );
 
-CREATE TABLE "umpires" (
+CREATE TABLE "umpire" (
   "id" int UNIQUE NOT NULL,
   "name" varchar
 );
 
-CREATE TABLE "teams" (
+CREATE TABLE "team" (
   "id" int UNIQUE NOT NULL,
   "name" varchar,
   "abbreviation" varchar
 );
 
-CREATE TABLE "games" (
+CREATE TABLE "game" (
   "id" int UNIQUE NOT NULL,
   "home_team" varchar,
   "away_team" varchar,
@@ -76,12 +76,12 @@ CREATE TABLE "games" (
   "away_team_id" int
 );
 
-CREATE TABLE "players" (
+CREATE TABLE "player" (
   "id" int UNIQUE NOT NULL,
   "name" varchar
 );
 
-CREATE TABLE "ejections" (
+CREATE TABLE "ejection" (
   "id" varchar UNIQUE NOT NULL,
   "game_date" date,
   "game_id" int,
@@ -99,37 +99,37 @@ CREATE TABLE "ejections" (
   "umpire_id" int
 );
 
-ALTER TABLE "pitches" ADD FOREIGN KEY ("home_team_id") REFERENCES "teams" ("id");
+ALTER TABLE "pitch" ADD FOREIGN KEY ("home_team_id") REFERENCES "team" ("id");
 
-ALTER TABLE "pitches" ADD FOREIGN KEY ("away_team_id") REFERENCES "teams" ("id");
+ALTER TABLE "pitch" ADD FOREIGN KEY ("away_team_id") REFERENCES "team" ("id");
 
-ALTER TABLE "pitches" ADD FOREIGN KEY ("game_id") REFERENCES "games" ("id");
+ALTER TABLE "pitch" ADD FOREIGN KEY ("game_id") REFERENCES "game" ("id");
 
-ALTER TABLE "pitches" ADD FOREIGN KEY ("team_benefit_id") REFERENCES "teams" ("id");
+ALTER TABLE "pitch" ADD FOREIGN KEY ("team_benefit_id") REFERENCES "team" ("id");
 
-ALTER TABLE "pitches" ADD FOREIGN KEY ("team_hurt_id") REFERENCES "teams" ("id");
+ALTER TABLE "pitch" ADD FOREIGN KEY ("team_hurt_id") REFERENCES "team" ("id");
 
-ALTER TABLE "pitches" ADD FOREIGN KEY ("batter_id") REFERENCES "players" ("id");
+ALTER TABLE "pitch" ADD FOREIGN KEY ("batter_id") REFERENCES "players" ("id");
 
-ALTER TABLE "pitches" ADD FOREIGN KEY ("pitcher_id") REFERENCES "players" ("id");
+ALTER TABLE "pitch" ADD FOREIGN KEY ("pitcher_id") REFERENCES "players" ("id");
 
-ALTER TABLE "pitches" ADD FOREIGN KEY ("catcher_id") REFERENCES "players" ("id");
+ALTER TABLE "pitch" ADD FOREIGN KEY ("catcher_id") REFERENCES "players" ("id");
 
-ALTER TABLE "pitches" ADD FOREIGN KEY ("umpire_id") REFERENCES "umpires" ("id");
+ALTER TABLE "pitch" ADD FOREIGN KEY ("umpire_id") REFERENCES "umpire" ("id");
 
-ALTER TABLE "games" ADD FOREIGN KEY ("umpire_id") REFERENCES "umpires" ("id");
+ALTER TABLE "game" ADD FOREIGN KEY ("umpire_id") REFERENCES "umpire" ("id");
 
-ALTER TABLE "games" ADD FOREIGN KEY ("home_team_id") REFERENCES "teams" ("id");
+ALTER TABLE "game" ADD FOREIGN KEY ("home_team_id") REFERENCES "team" ("id");
 
-ALTER TABLE "games" ADD FOREIGN KEY ("away_team_id") REFERENCES "teams" ("id");
+ALTER TABLE "game" ADD FOREIGN KEY ("away_team_id") REFERENCES "team" ("id");
 
-ALTER TABLE "ejections" ADD FOREIGN KEY ("game_id") REFERENCES "games" ("id");
+ALTER TABLE "ejections" ADD FOREIGN KEY ("game_id") REFERENCES "game" ("id");
 
-ALTER TABLE "ejections" ADD FOREIGN KEY ("home_team_id") REFERENCES "teams" ("id");
+ALTER TABLE "ejections" ADD FOREIGN KEY ("home_team_id") REFERENCES "team" ("id");
 
-ALTER TABLE "ejections" ADD FOREIGN KEY ("away_team_id") REFERENCES "teams" ("id");
+ALTER TABLE "ejections" ADD FOREIGN KEY ("away_team_id") REFERENCES "team" ("id");
 
-ALTER TABLE "ejections" ADD FOREIGN KEY ("umpire_id") REFERENCES "umpires" ("id");
+ALTER TABLE "ejections" ADD FOREIGN KEY ("umpire_id") REFERENCES "umpire" ("id");
 
 CREATE or REPLACE FUNCTION notify_new_ejection()
     RETURNS trigger
@@ -158,3 +158,7 @@ CREATE TRIGGER after_insert_ejection
     ON ejections
     FOR EACH ROW
     EXECUTE PROCEDURE notify_new_ejection();
+
+CREATE ROLE readaccess;
+GRANT CONNECT ON DATABASE umpire_auditor_prod;
+GRANT USAGE ON SCHEMA public TO readaccess;

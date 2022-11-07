@@ -330,7 +330,7 @@ def add_game_to_db(game_id):
     
     umpire_obj = Umpire(id = hp_umpire_id, name = hp_umpire_name)
     
-    db_umpire_query = dataclass_upsert_query('umpires', [umpire_obj], Umpire)
+    db_umpire_query = dataclass_upsert_query('umpire', [umpire_obj], Umpire)
     
     with psycopg.connect(conn_string, autocommit=True) as conn:
         cur = conn.cursor()
@@ -363,8 +363,8 @@ def add_game_to_db(game_id):
     
     # db_team_query = dataclass_upsert_query('teams', [away_team_obj, home_team_obj], Team)
     
-    db_home_query = dataclass_upsert_query('teams', [home_team_obj], Team)
-    db_away_query = dataclass_upsert_query('teams', [away_team_obj], Team)
+    db_home_query = dataclass_upsert_query('team', [home_team_obj], Team)
+    db_away_query = dataclass_upsert_query('team', [away_team_obj], Team)
     
     with psycopg.connect(conn_string, autocommit=True) as conn:
         cur = conn.cursor()
@@ -386,7 +386,7 @@ def add_game_to_db(game_id):
     player_queries = []
     
     for player_obj in player_rows:
-        player_queries.append(dataclass_upsert_query('players', [player_obj], Player))
+        player_queries.append(dataclass_upsert_query('player', [player_obj], Player))
     
     db_player_query = ';'.join(player_queries)
     
@@ -437,7 +437,7 @@ def add_game_to_db(game_id):
     pitch_queries = []
     
     for pitch_obj in pitch_list:
-        pitch_queries.append(dataclass_upsert_query('pitches', [pitch_obj], Pitch))
+        pitch_queries.append(dataclass_upsert_query('pitch', [pitch_obj], Pitch))
     
     db_pitch_query = ';'.join(pitch_queries)
     
@@ -447,7 +447,7 @@ def add_game_to_db(game_id):
     ejection_queries = []
     
     for ejection_obj in ejection_list:
-        ejection_queries.append(dataclass_upsert_query('ejections', [ejection_obj], Ejection))
+        ejection_queries.append(dataclass_upsert_query('ejection', [ejection_obj], Ejection))
     
     db_ejection_query = ';'.join(ejection_queries)
 
@@ -502,7 +502,7 @@ def add_game_to_db(game_id):
         )
     
 
-    db_game_query = dataclass_upsert_query('games', [game_object], Game)
+    db_game_query = dataclass_upsert_query('game', [game_object], Game)
         
     with psycopg.connect(conn_string, autocommit=True) as conn:
         cur = conn.cursor()
@@ -518,14 +518,14 @@ def add_game_to_db(game_id):
 #%% Cull ghost pitches
     with psycopg.connect(conn_string, autocommit=True) as conn:
         cur = conn.cursor()
-        cur.execute('SELECT id from pitches WHERE game_id=' + str(game_id))
+        cur.execute('SELECT id from pitch WHERE game_id=' + str(game_id))
         db_ids = [r[0] for r in cur.fetchall()]
 	
         diff_play_ids = [id for id in db_ids if id not in df_pitches['id'].to_list()]
 
         if len(diff_play_ids) > 0:
             logger.debug('Deleting pitch ids: %s', diff_play_ids)
-            cur.execute('DELETE FROM pitches WHERE id IN (%s)', diff_play_ids)
+            cur.execute('DELETE FROM pitch WHERE id IN (%s)', diff_play_ids)
 
 #%% Umpire Auditor
 
