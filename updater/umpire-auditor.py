@@ -173,6 +173,7 @@ def add_pitches(game_data):
                 "code": codes[i],
                 "strikes": counts[i]['strikes'],
                 'balls': counts[i]['balls'],
+                'datetime_start': start_times[i],
                 'timestamp_start_home': convert_timedelta(start_times[i] - start_time_home) if start_time_home else None,  
                 'timestamp_start_away': convert_timedelta(start_times[i] - start_time_away) if start_time_away else None,
                 'start_seconds_home': (start_times[i] - start_time_home).seconds if start_time_home else None,
@@ -180,7 +181,7 @@ def add_pitches(game_data):
                 'batter_id': batter_id,
                 'pitcher_id': pitcher_id
             }
-            
+
             if end_times[i]:
                 pitch['timestamp_end_home'] = convert_timedelta(end_times[i] - start_time_home) if start_time_home else None
                 pitch['timestamp_end_away'] = convert_timedelta(end_times[i] - start_time_away) if start_time_away else None
@@ -259,8 +260,8 @@ def get_hp_umpire(official):
 #%% Parse Player Data
 
 def parse_player_data(player_data):
-    if (player_data['isPlayer'] == False):
-        return None
+    if (player_data['isPlayer'] == False and 'batSide' not in player_data):
+        return
     else:    
         return Player(id = player_data['id'], name = player_data['fullName'])
 
@@ -340,6 +341,7 @@ def add_game_to_db(game_id):
 #%%% CREATE TEAM
 
     team_data = game_data['gameData']['teams']
+
     
     away_team = team_data['away']
     away_team_abbreviation = away_team['abbreviation']
@@ -384,7 +386,7 @@ def add_game_to_db(game_id):
     player_rows = list(map(parse_player_data, [*game_players.values()]))
     
     player_queries = []
-    
+
     for player_obj in player_rows:
         player_queries.append(dataclass_upsert_query('player', [player_obj], Player))
     
@@ -524,19 +526,14 @@ def add_game_to_db(game_id):
         diff_play_ids = [id for id in db_ids if id not in df_pitches['id'].to_list()]
 
         if len(diff_play_ids) > 0:
-            logger.debug('Deleting pitch ids: %s', diff_play_ids)
-            cur.execute('DELETE FROM pitch WHERE id IN (%s)', diff_play_ids)
+            for play_id in diff_play_ids:
+                logger.debug('Deleting pitch id: %s', play_id)
+                cur.execute('DELETE FROM pitch WHERE id = (%s)', [play_id])
 
 #%% Umpire Auditor
 
 def umpire_auditor(sdate, edate):
-    delta = edate - sdate
-
-    dates = []
-
-    for i in range(delta.days + 1):
-        day = sdate + timedelta(days=(i - 1))
-        dates.append(day)
+    dates = [d.date() for d in pd.date_range(sdate, edate)]
 
     game_ids = []
 

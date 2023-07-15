@@ -6,6 +6,7 @@ Created on Fri Jul  1 11:30:44 2022
 """
 #%%
 from dataclasses import dataclass
+from datetime import datetime
 
 #%%
 @dataclass
@@ -29,6 +30,7 @@ class Pitch:
     balls: int
     umpire_name: str
     game_id: int
+    datetime_start: datetime
     timestamp_start_home: str
     timestamp_start_away: str
     start_seconds_home: int

@@ -18,6 +18,7 @@ CREATE TABLE "pitch" (
   "balls" int,
   "umpire_name" varchar,
   "game_id" int,
+  "datetime_start" timestamptz,
   "timestamp_start_home" time(2),
   "timestamp_start_away" time(2),
   "start_seconds_home" int,
@@ -43,9 +44,12 @@ CREATE TABLE "pitch" (
   "catcher_id" int,
   "umpire_id" int,
   "possible_bad_data" bool,
-  "created_at" timestamp,
-  "updated_at" timestamp
+  "created_at" timestamptz,
+  "updated_at" timestamptz
 );
+
+CREATE INDEX datetime_start_index
+on pitch (datetime_start);
 
 CREATE TABLE "umpire" (
   "id" int UNIQUE NOT NULL,
