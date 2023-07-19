@@ -549,13 +549,13 @@ def umpire_auditor(sdate, edate):
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("-sdate", "--start-date", help="Start of date range to update", type=date.fromisoformat, default=date.today())
-parser.add_argument("-edate", "--end-date", help="End of date range to update", type=date.fromisoformat, default=date.today())
+parser.add_argument("-sdate", "--start-date", help="Start of date range to update", type=date.fromisoformat)
+parser.add_argument("-edate", "--end-date", help="End of date range to update", type=date.fromisoformat)
 
 args = parser.parse_args()
 
 today = datetime.now(tz=ZoneInfo("America/Los_Angeles")).date()
-sdate = today
+sdate = today - timedelta(days=1)
 edate = today
 
 if args.start_date:
