@@ -9,6 +9,7 @@ CREATE TABLE "pitch" (
   "inning" int,
   "inning_half" varchar,
   "outs" int,
+  "bat_side" varchar,
   "sz_top" float,
   "sz_bottom" float,
   "px" float,

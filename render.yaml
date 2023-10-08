@@ -2,7 +2,7 @@ databases:
   # db 1
   - name: umpire_auditor_prod
     region: oregon
-    plan: free
+    plan: standard
     databaseName: umpire_auditor_prod
     postgresMajorVersion: 14
   # Updater cron job

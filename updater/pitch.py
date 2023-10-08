@@ -21,6 +21,7 @@ class Pitch:
     inning: int
     inning_half: str
     outs: int
+    bat_side: str
     sz_top: float
     sz_bottom: float
     px: float

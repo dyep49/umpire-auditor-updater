@@ -139,6 +139,7 @@ def add_pitches(game_data):
         inning = play['about']['inning']
         inning_half = play['about']['halfInning']
         outs = play['count']['outs']
+        batter_hand = play['matchup']['batSide']['code']
         play_events = play['playEvents']
         ## WHAT HAPPENS WHEN THERE'S A MID ATBAT PITCHER CHANGE?
         batter_id = play['matchup']['batter']['id']
@@ -166,6 +167,7 @@ def add_pitches(game_data):
                 "inning": inning,
                 "inning_half": inning_half,
                 "outs": outs,
+                "bat_side": batter_hand,
                 "sz_top": row['strikeZoneTop'],
                 "sz_bottom": row['strikeZoneBottom'],
                 "px": row['coordinates']['pX'],
