@@ -22,6 +22,8 @@ class Ejection:
     game_id: int
     timestamp_start_home: str
     timestamp_start_away: str
+    home_media_id: str
+    away_media_id: str
     start_seconds_home: int
     start_seconds_away: int
     player_id: int

@@ -26,6 +26,8 @@ CREATE TABLE "pitch" (
   "start_seconds_away" int,
   "timestamp_end_home" time(2),
   "timestamp_end_away" time(2),
+  "home_media_id" varchar,
+  "away_media_id" varchar,
   "is_call" bool,
   "correct_call" bool,
   "blown_strikeout" bool,
@@ -100,6 +102,8 @@ CREATE TABLE "ejection" (
   "timestamp_start_away" time(2),
   "start_seconds_home" int,
   "start_seconds_away" int,
+  "home_media_id" varchar,
+  "away_media_id" varchar,
   "player_id" int,
   "umpire_id" int
 );

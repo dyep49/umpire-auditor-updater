@@ -16,6 +16,7 @@ import dataclasses
 import sys
 import argparse
 import hashlib
+import portion as P
 
 from pitch import Pitch
 from game import Game
@@ -130,6 +131,10 @@ def add_pitches(game_data):
     all_plays = game_data['allPlays']
     start_time_home = game_data['start_time_home']
     start_time_away = game_data['start_time_away']
+    home_media_id = game_data['home_media_id']
+    away_media_id = game_data['away_media_id']
+    home_catcher_interval = game_data['home_catcher_interval']
+    away_catcher_interval = game_data['away_catcher_interval']
 
     for play in all_plays:
         if not 'description' in play['result']:
@@ -160,7 +165,9 @@ def add_pitches(game_data):
             
             if not 'pX' in row['coordinates']:
                 continue
-                            
+
+            pitch_start_time = start_times[i]
+
             pitch = {
                 "id": ids[i],
                 "play_description": description,
@@ -175,13 +182,16 @@ def add_pitches(game_data):
                 "code": codes[i],
                 "strikes": counts[i]['strikes'],
                 'balls': counts[i]['balls'],
-                'datetime_start': start_times[i],
+                'datetime_start': pitch_start_time,
                 'timestamp_start_home': convert_timedelta(start_times[i] - start_time_home) if start_time_home else None,  
                 'timestamp_start_away': convert_timedelta(start_times[i] - start_time_away) if start_time_away else None,
                 'start_seconds_home': (start_times[i] - start_time_home).seconds if start_time_home else None,
                 'start_seconds_away': (start_times[i] - start_time_away).seconds if start_time_away else None,
                 'batter_id': batter_id,
-                'pitcher_id': pitcher_id
+                'pitcher_id': pitcher_id,
+                'catcher_id': home_catcher_interval[pitch_start_time] if inning_half == 'top' else away_catcher_interval[pitch_start_time],
+                'home_media_id': home_media_id,
+                'away_media_id': away_media_id
             }
 
             if end_times[i]:
@@ -240,7 +250,9 @@ def add_pitches(game_data):
                             'start_seconds_home': (start_time - start_time_home).seconds if start_time_home else None,
                             'start_seconds_away': (start_time - start_time_away).seconds if start_time_away else None,
                             'player_id': event['player']['id'],
-                            'umpire_id': event['umpire']['id']
+                            'umpire_id': event['umpire']['id'],
+                            'home_media_id': home_media_id,
+                            'away_media_id': away_media_id
                         }
                         
                         game_ejections.append(ejection)
@@ -411,16 +423,74 @@ def add_game_to_db(game_id):
         first_item = content_items[0]
         second_item = content_items[1]
         home_feed_id = first_item["contentId"] if first_item["mediaFeedType"] == "HOME" else second_item["contentId"]
+        home_media_id = first_item["mediaId"] if first_item["mediaFeedType"] == "HOME" else second_item["mediaId"]
         away_feed_id = first_item["contentId"] if first_item["mediaFeedType"] == "AWAY" else second_item["contentId"]
+        away_media_id = first_item["mediaId"] if first_item["mediaFeedType"] == "AWAY" else second_item["mediaId"]
     elif (len(content_items) == 1):
         home_feed_id = content_items[0]["contentId"]
+        home_media_id = content_items[0]["mediaId"]
         away_feed_id = content_items[0]["contentId"]
+        away_media_id = content_items[0]["mediaId"]
     # else:
     #    continue
     
     play_data['start_time_away'] = game_start_time(away_feed_id)
     play_data['start_time_home'] = game_start_time(home_feed_id)
+    play_data['home_media_id'] = home_media_id
+    play_data['away_media_id'] = away_media_id
+
+    ## Collecting catcher IDs
+    boxscore_players = game_data['liveData']['boxscore']['teams']
+    home_players = boxscore_players['home']['players']
+    away_players = boxscore_players['away']['players']
+    home_player_ids = [player['person']['id'] for player in list(home_players.values())]
+    away_player_ids = [player['person']['id'] for player in list(away_players.values())]
+
+    starting_home_catcher_id = None
+    starting_away_catcher_id = None
+
+    for value in home_players.values():
+        isCatcher = value['position']['name'] == 'Catcher'
+        isSub = value['gameStatus']['isSubstitute'] == True
+        onBench = value['gameStatus']['isOnBench'] == True
+        if isCatcher and not isSub and not onBench:
+            starting_home_catcher_id = value['person']['id']
+
+    for value in away_players.values():
+        isCatcher = value['position']['name'] == 'Catcher'
+        isSub = value['gameStatus']['isSubstitute'] == True
+        onBench = value['gameStatus']['isOnBench'] == True
+        if isCatcher and not isSub and not onBench:
+            starting_away_catcher_id = value['person']['id']
+
+    all_plays = game_data['liveData']['plays']['allPlays']
+    all_events = []
+    catcher_subs = []
+
+    for play in all_plays:
+        for event in play['playEvents']:
+            all_events.append(event)
+
+    for event in all_events:
+        if 'isSubstitution' in event and event['position']['name'] == 'Catcher':
+            catcher_subs.append(event)
     
+    def gen_catcher_interval(starting_id, player_ids, subs):
+        catcher_interval = P.IntervalDict()
+        catcher_interval[P.closed(datetime.min, datetime.max)] = starting_id
+
+        for catcher_sub in catcher_subs:
+            catcher_sub_id = catcher_sub['player']['id']
+
+            if catcher_sub_id in player_ids:
+                start_datetime = datetime.strptime(catcher_sub['startTime'], TIME_FORMAT_MS)
+                catcher_interval[P.closed(start_datetime, datetime.max)] = catcher_sub_id
+
+        return catcher_interval
+        
+    play_data['home_catcher_interval'] = gen_catcher_interval(starting_home_catcher_id, home_player_ids, catcher_subs)
+    play_data['away_catcher_interval'] = gen_catcher_interval(starting_away_catcher_id, away_player_ids, catcher_subs)
+
     pitches_data = add_pitches(play_data)
     
     pitch_rows = pitches_data['game_pitches']
@@ -433,7 +503,7 @@ def add_game_to_db(game_id):
         'away_team': away_team_abbreviation,
         'home_team_id': home_team_id,
         'away_team_id': away_team_id,
-        'game_date': game_date,
+        'game_date': game_date
     }
     
     pitch_list = list(map(lambda p: add_game_data(p, pitch_game_data), pitch_rows))
