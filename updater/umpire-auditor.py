@@ -418,19 +418,31 @@ def add_game_to_db(game_id):
     ## GATHER MLB.TV BROADCAST DATA XXX THIS SHOULD MAYBE GO INTO GAME TABLE AS WELL
     content = statsapi.get('game_content', {'gamePk': game_id})
     content_items = content['media']['epg'][0]['items']
+
+    
+    media_url = f'https://mastapi.mobile.mlbinfra.com/api/epg/v3/search?exp=MLB&gamePk={game_id}'
+    media_request = requests.get(media_url)
+    media_response = media_request.json()
+    media_items = media_response['results'][0]['videoFeeds']
         
     if (len(content_items) > 1):
         first_item = content_items[0]
         second_item = content_items[1]
         home_feed_id = first_item["contentId"] if first_item["mediaFeedType"] == "HOME" else second_item["contentId"]
-        home_media_id = first_item["mediaId"] if first_item["mediaFeedType"] == "HOME" else second_item["mediaId"]
         away_feed_id = first_item["contentId"] if first_item["mediaFeedType"] == "AWAY" else second_item["contentId"]
-        away_media_id = first_item["mediaId"] if first_item["mediaFeedType"] == "AWAY" else second_item["mediaId"]
     elif (len(content_items) == 1):
         home_feed_id = content_items[0]["contentId"]
-        home_media_id = content_items[0]["mediaId"]
         away_feed_id = content_items[0]["contentId"]
-        away_media_id = content_items[0]["mediaId"]
+
+    if (len(media_items) > 1):
+        first_item_media = media_items[0]
+        second_item_media = media_items[1]
+        home_media_id = first_item_media["mediaId"] if first_item_media["mediaFeedType"] == "HOME" else second_item_media["mediaId"]
+        away_media_id = first_item_media["mediaId"] if first_item_media["mediaFeedType"] == "AWAY" else second_item_media["mediaId"]
+    elif (len(content_items) == 1):
+        home_media_id = media_items[0]["mediaId"]
+        away_feed_id = media_items[0]["mediaId"]
+
     # else:
     #    continue
     
