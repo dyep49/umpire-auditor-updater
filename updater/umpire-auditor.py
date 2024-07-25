@@ -439,13 +439,13 @@ def add_game_to_db(game_id):
         second_item_media = media_items[1]
         home_media_id = first_item_media["mediaId"] if first_item_media["mediaFeedType"] == "HOME" else second_item_media["mediaId"]
         away_media_id = first_item_media["mediaId"] if first_item_media["mediaFeedType"] == "AWAY" else second_item_media["mediaId"]
-    elif (len(content_items) == 1):
+    elif (len(media_items) == 1):
         home_media_id = media_items[0]["mediaId"]
-        away_feed_id = media_items[0]["mediaId"]
+        away_media_id = media_items[0]["mediaId"]
 
     # else:
     #    continue
-    
+
     play_data['start_time_away'] = game_start_time(away_feed_id)
     play_data['start_time_home'] = game_start_time(home_feed_id)
     play_data['home_media_id'] = home_media_id
