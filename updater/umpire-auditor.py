@@ -424,6 +424,7 @@ def add_game_to_db(game_id):
     media_request = requests.get(media_url)
     media_response = media_request.json()
     media_items = media_response['results'][0]['videoFeeds']
+
         
     if (len(content_items) > 1):
         first_item = content_items[0]
@@ -433,6 +434,9 @@ def add_game_to_db(game_id):
     elif (len(content_items) == 1):
         home_feed_id = content_items[0]["contentId"]
         away_feed_id = content_items[0]["contentId"]
+
+    if (len(media_items) == 0):
+        media_items = media_response['results'][1]['videoFeeds']
 
     if (len(media_items) > 1):
         first_item_media = media_items[0]
