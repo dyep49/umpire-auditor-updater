@@ -4,3 +4,4 @@ pandas
 psycopg
 pypika
 portion
+gql[all]

@@ -98,27 +98,27 @@ def convert_timedelta(duration):
     
 #%% Game Start Time
 
-def game_start_time(content_id):
-    url = 'http://search-api-mlbtv.mlb.com/svc/search/v2/graphql'
-    query = """query getStartTime($contentId: ID) {
-        Airings(contentId: $contentId) {
-            milestones(milestoneType: "BROADCAST_START") {
-              milestoneTime {
-                startDatetime
-              },
-            }
-          }
+def game_start_time(media_id):
 
+    url = 'https://media-gateway.mlb.com/graphql'
+    query = """query mediaInfo($ids: [String]) {
+        mediaInfo(ids: $ids) {
+            milestones {
+              milestoneType
+              relativeTime
+              absoluteTime
+            }
+        }
     }"""
     
-    variables = {'contentId': content_id}
+    variables = {'ids': media_id}
     res = requests.post(url, json={'query': query, 'variables': variables})
-    airings = res.json()["data"]["Airings"]
+    mediaInfo = res.json()["data"]["mediaInfo"]
     
     try:
-        milestoneTimes = airings[0]["milestones"][0]["milestoneTime"]
-        start_time = [t for t in milestoneTimes if t["startDatetime"] != None][0]["startDatetime"]
-        return datetime.strptime(start_time, TIME_FORMAT)
+        milestones = mediaInfo[0]["milestones"]
+        broadcast_start = [milestone["absoluteTime"] for milestone in milestones if milestone["milestoneType"] == "BROADCAST_START"]
+        return datetime.strptime(broadcast_start[0], TIME_FORMAT_MS)
     except:
         return None
 
@@ -425,7 +425,6 @@ def add_game_to_db(game_id):
     media_response = media_request.json()
     media_items = media_response['results'][0]['videoFeeds']
 
-        
     if (len(content_items) > 1):
         first_item = content_items[0]
         second_item = content_items[1]
@@ -450,8 +449,8 @@ def add_game_to_db(game_id):
     # else:
     #    continue
 
-    play_data['start_time_away'] = game_start_time(away_feed_id)
-    play_data['start_time_home'] = game_start_time(home_feed_id)
+    play_data['start_time_away'] = game_start_time(away_media_id)
+    play_data['start_time_home'] = game_start_time(home_media_id)
     play_data['home_media_id'] = home_media_id
     play_data['away_media_id'] = away_media_id
 
