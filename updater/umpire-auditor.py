@@ -437,6 +437,9 @@ def add_game_to_db(game_id):
     if (len(media_items) == 0):
         media_items = media_response['results'][1]['videoFeeds']
 
+    if (len(media_items) == 0):
+        media_items = media_response['results'][2]['videoFeeds']
+
     if (len(media_items) > 1):
         first_item_media = media_items[0]
         second_item_media = media_items[1]
