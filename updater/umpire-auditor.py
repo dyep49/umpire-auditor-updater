@@ -417,7 +417,11 @@ def add_game_to_db(game_id):
     
     ## GATHER MLB.TV BROADCAST DATA XXX THIS SHOULD MAYBE GO INTO GAME TABLE AS WELL
     content = statsapi.get('game_content', {'gamePk': game_id})
-    content_items = content['media']['epg'][0]['items']
+
+    if 'epg' in content['media']:
+        content_items = content['media']['epg'][0]['items']
+    else:
+        content_items = []
 
     
     media_url = f'https://mastapi.mobile.mlbinfra.com/api/epg/v3/search?exp=MLB&gamePk={game_id}'
