@@ -40,6 +40,10 @@ class Pitch:
     timestamp_end_away: str
     home_media_id: str
     away_media_id: str
+    home_media_call_letters: str
+    away_media_call_letters: str
+    home_media_state: str
+    away_media_state: str
     correct_call: bool
     batter_id: int
     pitcher_id: int 

@@ -80,7 +80,9 @@ CREATE TABLE "game" (
   "umpire_name" varchar,
   "umpire_id" int,
   "home_team_id" int,
-  "away_team_id" int
+  "away_team_id" int,
+  "home_feed_offset": int,
+  "away_feed_offset": int
 );
 
 CREATE TABLE "player" (

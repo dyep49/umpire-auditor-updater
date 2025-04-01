@@ -133,8 +133,32 @@ def add_pitches(game_data):
     start_time_away = game_data['start_time_away']
     home_media_id = game_data['home_media_id']
     away_media_id = game_data['away_media_id']
+    home_media_call_letters = game_data['home_media_call_letters']
+    away_media_call_letters = game_data['away_media_call_letters']
+    home_media_state = game_data['home_media_state']
+    away_media_state = game_data['away_media_state']
     home_catcher_interval = game_data['home_catcher_interval']
     away_catcher_interval = game_data['away_catcher_interval']
+
+    first_play = all_plays[0]
+    first_play_events = first_play['playEvents']
+    first_play_pitches = [event for event in first_play_events if event['isPitch']]
+    first_play_start_times = [datetime.strptime(pitch['startTime'], TIME_FORMAT_MS) for pitch in first_play_pitches]
+    first_pitch_datetime_start = first_play_start_times[0]
+    first_pitch_start_seconds_home = (first_play_start_times[0] - start_time_home).seconds if start_time_home else None
+    first_pitch_start_seconds_away = (first_play_start_times[0] - start_time_away).seconds if start_time_away else None
+
+    game_media = {
+        "home_media_id": home_media_id,
+        "away_media_id": away_media_id,
+        "home_media_call_letters": home_media_call_letters,
+        "away_media_call_letters": away_media_call_letters,
+        "home_media_state": home_media_state,
+        "away_media_state": away_media_state,
+        "first_pitch_datetime_start": first_pitch_datetime_start,
+        "first_pitch_start_seconds_home": first_pitch_start_seconds_home,
+        "first_pitch_start_seconds_away": first_pitch_start_seconds_away
+    }
 
     for play in all_plays:
         if not 'description' in play['result']:
@@ -191,7 +215,11 @@ def add_pitches(game_data):
                 'pitcher_id': pitcher_id,
                 'catcher_id': home_catcher_interval[pitch_start_time] if inning_half == 'top' else away_catcher_interval[pitch_start_time],
                 'home_media_id': home_media_id,
-                'away_media_id': away_media_id
+                'away_media_id': away_media_id,
+                'home_media_call_letters': home_media_call_letters,
+                'away_media_call_letters': away_media_call_letters,
+                'home_media_state': home_media_state,
+                'away_media_state': away_media_state
             }
 
             if end_times[i]:
@@ -260,7 +288,7 @@ def add_pitches(game_data):
                 except KeyError:
                     pass
     
-    game_pitch_data = {'game_pitches': game_pitches, 'game_ejections': game_ejections}
+    game_pitch_data = {'game_pitches': game_pitches, 'game_ejections': game_ejections, 'game_media': game_media}
     return game_pitch_data
 
 #%% Get HP Umpire
@@ -434,6 +462,7 @@ def add_game_to_db(game_id):
         second_item = content_items[1]
         home_feed_id = first_item["contentId"] if first_item["mediaFeedType"] == "HOME" else second_item["contentId"]
         away_feed_id = first_item["contentId"] if first_item["mediaFeedType"] == "AWAY" else second_item["contentId"]
+    
     elif (len(content_items) == 1):
         home_feed_id = content_items[0]["contentId"]
         away_feed_id = content_items[0]["contentId"]
@@ -449,9 +478,19 @@ def add_game_to_db(game_id):
         second_item_media = media_items[1]
         home_media_id = first_item_media["mediaId"] if first_item_media["mediaFeedType"] == "HOME" else second_item_media["mediaId"]
         away_media_id = first_item_media["mediaId"] if first_item_media["mediaFeedType"] == "AWAY" else second_item_media["mediaId"]
+
+        home_media_call_letters = first_item_media["callLetters"] if first_item_media["mediaFeedType"] == "HOME" else second_item_media["callLetters"]
+        away_media_call_letters = first_item_media["callLetters"] if first_item_media["mediaFeedType"] == "AWAY" else second_item_media["callLetters"]
+        home_media_state = first_item_media["mediaState"] if first_item_media["mediaFeedType"] == "HOME" else second_item_media["mediaState"]
+        away_media_state = first_item_media["mediaState"] if first_item_media["mediaFeedType"] == "AWAY" else second_item_media["mediaState"]
+
     elif (len(media_items) == 1):
         home_media_id = media_items[0]["mediaId"]
         away_media_id = media_items[0]["mediaId"]
+        home_media_call_letters = media_items[0]["callLetters"]
+        away_media_call_letters = media_items[0]["callLetters"]
+        home_media_state = media_items[0]["mediaState"]
+        away_media_state = media_items[0]["mediaState"]
 
     # else:
     #    continue
@@ -460,6 +499,10 @@ def add_game_to_db(game_id):
     play_data['start_time_home'] = game_start_time(home_media_id)
     play_data['home_media_id'] = home_media_id
     play_data['away_media_id'] = away_media_id
+    play_data['home_media_call_letters'] = home_media_call_letters
+    play_data['away_media_call_letters'] = away_media_call_letters
+    play_data['home_media_state'] = home_media_state
+    play_data['away_media_state'] = away_media_state
 
     ## Collecting catcher IDs
     boxscore_players = game_data['liveData']['boxscore']['teams']
@@ -550,6 +593,7 @@ def add_game_to_db(game_id):
 #%%# Create Game
 
     df_pitches = pd.DataFrame(pitch_list)   
+    media_data = pitches_data['game_media']
     
     # Games like the one at Tokyo Dome are regular season but have no pitch tracking
     if len(df_pitches) == 0:
@@ -568,7 +612,16 @@ def add_game_to_db(game_id):
             umpire_name = hp_umpire_name,
             umpire_id = hp_umpire_id,
             home_team_id = home_team_id,
-            away_team_id = away_team_id
+            away_team_id = away_team_id,
+            home_media_id = media_data['home_media_id'],
+            away_media_id = media_data['away_media_id'],
+            home_media_call_letters = media_data['home_media_call_letters'],
+            away_media_call_letters = media_data['away_media_call_letters'],
+            home_media_state = media_data['home_media_state'],
+            away_media_state = media_data['away_media_state'],
+            first_pitch_datetime_start = media_data['first_pitch_datetime_start'],
+            first_pitch_start_seconds_home = media_data['first_pitch_start_seconds_home'],
+            first_pitch_start_seconds_away = media_data['first_pitch_start_seconds_away'],
         )
     else:
         incorrect_calls = df_pitches.loc[df_pitches['correct_call'] == False].sort_values(by='total_miss', ascending=False)
@@ -594,7 +647,16 @@ def add_game_to_db(game_id):
             umpire_name = hp_umpire_name,
             umpire_id = hp_umpire_id,
             home_team_id = home_team_id,
-            away_team_id = away_team_id
+            away_team_id = away_team_id,
+            home_media_id = media_data['home_media_id'],
+            away_media_id = media_data['away_media_id'],
+            home_media_call_letters = media_data['home_media_call_letters'],
+            away_media_call_letters = media_data['away_media_call_letters'],
+            home_media_state = media_data['home_media_state'],
+            away_media_state = media_data['away_media_state'],
+            first_pitch_datetime_start = media_data['first_pitch_datetime_start'],
+            first_pitch_start_seconds_home = media_data['first_pitch_start_seconds_home'],
+            first_pitch_start_seconds_away = media_data['first_pitch_start_seconds_away'],
         )
     
 

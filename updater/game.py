@@ -7,6 +7,7 @@ Created on Fri Jul  1 12:28:24 2022
 
 #%%
 from dataclasses import dataclass
+from datetime import datetime
 
 #%%
 @dataclass
@@ -26,6 +27,15 @@ class Game:
    umpire_id: int
    home_team_id: int
    away_team_id: int
+   home_media_id: str
+   away_media_id: str
+   home_media_call_letters: str
+   away_media_call_letters: str
+   home_media_state: str
+   away_media_state: str
+   first_pitch_datetime_start: datetime
+   first_pitch_start_seconds_home: int
+   first_pitch_start_seconds_away: int
    
    def get_values(self):
        return tuple(vars(self).values())
