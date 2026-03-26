@@ -140,13 +140,18 @@ def add_pitches(game_data):
     home_catcher_interval = game_data['home_catcher_interval']
     away_catcher_interval = game_data['away_catcher_interval']
 
-    first_play = all_plays[0]
-    first_play_events = first_play['playEvents']
-    first_play_pitches = [event for event in first_play_events if event['isPitch']]
-    first_play_start_times = [datetime.strptime(pitch['startTime'], TIME_FORMAT_MS) for pitch in first_play_pitches]
-    first_pitch_datetime_start = first_play_start_times[0]
-    first_pitch_start_seconds_home = (first_play_start_times[0] - start_time_home).seconds if start_time_home else None
-    first_pitch_start_seconds_away = (first_play_start_times[0] - start_time_away).seconds if start_time_away else None
+    first_pitch_datetime_start = None
+    first_pitch_start_seconds_home = None
+    first_pitch_start_seconds_away = None
+
+    for play in all_plays:
+        play_events = play['playEvents']
+        play_pitches = [event for event in play_events if event['isPitch']]
+        if len(play_pitches) > 0:
+            first_pitch_datetime_start = datetime.strptime(play_pitches[0]['startTime'], TIME_FORMAT_MS)
+            first_pitch_start_seconds_home = (first_pitch_datetime_start - start_time_home).seconds if start_time_home else None
+            first_pitch_start_seconds_away = (first_pitch_datetime_start - start_time_away).seconds if start_time_away else None
+            break
 
     game_media = {
         "home_media_id": home_media_id,
@@ -700,8 +705,11 @@ def umpire_auditor(sdate, edate):
         game_ids = game_ids + date_game_ids
 
     for gid in game_ids:
-        logger.debug('Processing game id: %s', gid)
-        add_game_to_db(gid)
+        try:
+            logger.debug('Processing game id: %s', gid)
+            add_game_to_db(gid)
+        except Exception as e:
+            logger.error('Error processing game id %s: %s', gid, e)
 
 parser = argparse.ArgumentParser()
 
