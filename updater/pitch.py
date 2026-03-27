@@ -62,6 +62,10 @@ class Pitch:
     blown_strikeout: bool = False
     blown_walk: bool = False
     possible_bad_data: bool = False
-    
+    is_abs_challenge: bool = False
+    abs_challenge_overturned: bool = False
+    abs_challenge_team_id: int = None
+    abs_challenge_player_id: int = None
+
     def get_values(self):
         return tuple(vars(self).values())

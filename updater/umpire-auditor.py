@@ -181,6 +181,7 @@ def add_pitches(game_data):
         pitches = [event for event in play_events if event['isPitch']]
         counts = [{'balls': 0, 'strikes': 0}] + [pitch['count'] for pitch in pitches]
         codes = [pitch['details']['code'] for pitch in pitches]
+        review_details = [pitch.get('reviewDetails') for pitch in pitches]
         ids = [pitch['playId'] for pitch in pitches]
         start_times = [datetime.strptime(pitch['startTime'], TIME_FORMAT_MS) for pitch in pitches]
         end_times = [datetime.strptime(pitch['endTime'], TIME_FORMAT_MS) if "endTime" in pitch else None for pitch in pitches]
@@ -230,8 +231,20 @@ def add_pitches(game_data):
             if end_times[i]:
                 pitch['timestamp_end_home'] = convert_timedelta(end_times[i] - start_time_home) if start_time_home else None
                 pitch['timestamp_end_away'] = convert_timedelta(end_times[i] - start_time_away) if start_time_away else None
-                
-            
+
+            # ABS Challenge tracking
+            rd = review_details[i]
+            if rd and rd.get('reviewType') == 'MJ':
+                pitch['is_abs_challenge'] = True
+                pitch['abs_challenge_overturned'] = rd.get('isOverturned', False)
+                pitch['abs_challenge_team_id'] = rd.get('challengeTeamId')
+                pitch['abs_challenge_player_id'] = rd['player']['id'] if 'player' in rd else None
+
+                # If overturned, flip the code back to the original umpire call
+                # so correct_call evaluates against what the umpire actually called
+                if pitch['abs_challenge_overturned']:
+                    pitch['code'] = 'C' if pitch['code'] == 'B' else 'B'
+
             abs_px = abs(pitch['px'])
             
             if pitch['code'] == 'C':

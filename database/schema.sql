@@ -47,6 +47,10 @@ CREATE TABLE "pitch" (
   "catcher_id" int,
   "umpire_id" int,
   "possible_bad_data" bool,
+  "is_abs_challenge" bool,
+  "abs_challenge_overturned" bool,
+  "abs_challenge_team_id" int,
+  "abs_challenge_player_id" int,
   "created_at" timestamptz,
   "updated_at" timestamptz
 );
