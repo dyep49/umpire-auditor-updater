@@ -305,7 +305,51 @@ def add_pitches(game_data):
                         
                 except KeyError:
                     pass
-    
+
+        # Fill missing ABS challenge data from play-level reviewDetails.
+        # The MLB API sometimes omits reviewDetails on individual pitch events
+        # but includes it on the play (at-bat) object itself.
+        play_rd = play.get('reviewDetails')
+        if play_rd and play_rd.get('reviewType') == 'MJ' and game_pitches:
+            last_pitch = game_pitches[-1]
+            if not last_pitch.get('is_abs_challenge') and last_pitch.get('play_description') == description:
+                last_pitch['is_abs_challenge'] = True
+                last_pitch['abs_challenge_overturned'] = play_rd.get('isOverturned', False)
+                last_pitch['abs_challenge_team_id'] = play_rd.get('challengeTeamId')
+                last_pitch['abs_challenge_player_id'] = play_rd['player']['id'] if 'player' in play_rd else None
+
+                # If overturned, flip code back to umpire's original call
+                if last_pitch['abs_challenge_overturned']:
+                    last_pitch['code'] = 'C' if last_pitch['code'] == 'B' else 'B'
+
+                # Recalculate correctness and miss distances with updated code
+                abs_px = abs(last_pitch['px'])
+                if last_pitch['code'] == 'C':
+                    last_pitch['correct_call'] = strike(last_pitch)
+                    last_pitch['x_miss'] = 0 if width_strike(last_pitch) else abs_px - HALF_STRIKE_ZONE
+                    if height_strike(last_pitch):
+                        last_pitch['y_miss'] = 0
+                    elif last_pitch['pz'] > (last_pitch['sz_top'] + BALL_RADIUS):
+                        last_pitch['y_miss'] = last_pitch['pz'] - last_pitch['sz_top'] - BALL_RADIUS
+                    else:
+                        last_pitch['y_miss'] = last_pitch['sz_bottom'] - BALL_RADIUS - last_pitch['pz']
+                    if not last_pitch['correct_call']:
+                        last_pitch['total_miss'] = math.sqrt(last_pitch['x_miss'] ** 2 + last_pitch['y_miss'] ** 2)
+                        last_pitch['total_miss_in'] = round(last_pitch['total_miss'] * 12, 2)
+                elif last_pitch['code'] == 'B':
+                    last_pitch['correct_call'] = not strike(last_pitch)
+
+                if not last_pitch['correct_call']:
+                    if last_pitch['code'] == 'B':
+                        last_pitch['home_away_benefit'] = "away" if inning_half == "top" else "home"
+                        last_pitch['player_type_benefit'] = 'batter'
+                        last_pitch['blown_walk'] = last_pitch['balls'] == 3
+                    elif last_pitch['code'] == 'C':
+                        last_pitch['home_away_benefit'] = "home" if inning_half == "top" else "away"
+                        last_pitch['player_type_benefit'] = 'pitcher'
+                        last_pitch['blown_strikeout'] = last_pitch['strikes'] == 2
+                        last_pitch['possible_bad_data'] = last_pitch.get('total_miss_in', 0) > 7
+
     game_pitch_data = {'game_pitches': game_pitches, 'game_ejections': game_ejections, 'game_media': game_media}
     return game_pitch_data
 
