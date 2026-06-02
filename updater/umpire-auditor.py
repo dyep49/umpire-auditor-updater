@@ -166,15 +166,41 @@ def add_pitches(game_data):
     }
 
     for play in all_plays:
+        play_events = play['playEvents']
+
+        # Ejections must be scanned at the play level, not inside the pitch
+        # loop below. The pitch loop skips plays whose pitches are not called
+        # balls/strikes (e.g. fouls, balls in play), which would silently drop
+        # any ejection that occurred during such a play.
+        for event in play_events:
+            try:
+                if event['details']['eventType'] == 'ejection':
+                    start_time = datetime.strptime(event['startTime'], TIME_FORMAT_MS)
+
+                    ejection = {
+                        'description': event['details']['description'],
+                        'timestamp_start_home': convert_timedelta(start_time - start_time_home) if start_time_home else None,
+                        'timestamp_start_away': convert_timedelta(start_time - start_time_away) if start_time_away else None,
+                        'start_seconds_home': (start_time - start_time_home).seconds if start_time_home else None,
+                        'start_seconds_away': (start_time - start_time_away).seconds if start_time_away else None,
+                        'player_id': event['player']['id'],
+                        'umpire_id': event['umpire']['id'],
+                        'home_media_id': home_media_id,
+                        'away_media_id': away_media_id
+                    }
+
+                    game_ejections.append(ejection)
+            except KeyError:
+                pass
+
         if not 'description' in play['result']:
             continue
-        
+
         description = play['result']['description']
         inning = play['about']['inning']
         inning_half = play['about']['halfInning']
         outs = play['count']['outs']
         batter_hand = play['matchup']['batSide']['code']
-        play_events = play['playEvents']
         ## WHAT HAPPENS WHEN THERE'S A MID ATBAT PITCHER CHANGE?
         batter_id = play['matchup']['batter']['id']
         pitcher_id = play['matchup']['pitcher']['id']
@@ -283,28 +309,6 @@ def add_pitches(game_data):
                     pitch['possible_bad_data'] = pitch['total_miss_in'] > 7
             
             game_pitches.append(pitch)
-            
-            for event in play_events:
-                try:
-                    if event['details']['eventType'] == 'ejection':
-                        start_time = datetime.strptime(event['startTime'], TIME_FORMAT_MS)
-                        
-                        ejection = {
-                            'description': event['details']['description'],
-                            'timestamp_start_home': convert_timedelta(start_time - start_time_home) if start_time_home else None,  
-                            'timestamp_start_away': convert_timedelta(start_time - start_time_away) if start_time_away else None,
-                            'start_seconds_home': (start_time - start_time_home).seconds if start_time_home else None,
-                            'start_seconds_away': (start_time - start_time_away).seconds if start_time_away else None,
-                            'player_id': event['player']['id'],
-                            'umpire_id': event['umpire']['id'],
-                            'home_media_id': home_media_id,
-                            'away_media_id': away_media_id
-                        }
-                        
-                        game_ejections.append(ejection)
-                        
-                except KeyError:
-                    pass
 
         # Fill missing ABS challenge data from play-level reviewDetails.
         # The MLB API sometimes omits reviewDetails on individual pitch events
