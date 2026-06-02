@@ -294,7 +294,22 @@ def add_pitches(game_data):
                                    
             if pitch['code'] == 'B':
                 pitch['correct_call'] = not strike(pitch)
-                
+
+            # ABS is the authority: if overturned, the umpire was wrong regardless
+            # of our zone geometry (which includes ball radius that ABS may not use).
+            if pitch.get('abs_challenge_overturned') and pitch['correct_call']:
+                pitch['correct_call'] = False
+                if pitch['code'] == 'C':
+                    pitch['x_miss'] = max(abs_px - HALF_STRIKE_ZONE, 0)
+                    if height_strike(pitch):
+                        pitch['y_miss'] = 0
+                    elif pitch['pz'] > (pitch['sz_top'] + BALL_RADIUS):
+                        pitch['y_miss'] = pitch['pz'] - pitch['sz_top'] - BALL_RADIUS
+                    else:
+                        pitch['y_miss'] = pitch['sz_bottom'] - BALL_RADIUS - pitch['pz']
+                    pitch['total_miss'] = math.sqrt(pitch['x_miss'] ** 2 + pitch['y_miss'] ** 2)
+                    pitch['total_miss_in'] = round(pitch['total_miss'] * 12, 2)
+
             if pitch['correct_call'] == False:
                     
                 if pitch['code'] == 'B':
@@ -342,6 +357,21 @@ def add_pitches(game_data):
                         last_pitch['total_miss_in'] = round(last_pitch['total_miss'] * 12, 2)
                 elif last_pitch['code'] == 'B':
                     last_pitch['correct_call'] = not strike(last_pitch)
+
+                # ABS is the authority: if overturned, the umpire was wrong regardless
+                if last_pitch.get('abs_challenge_overturned') and last_pitch['correct_call']:
+                    last_pitch['correct_call'] = False
+                    if last_pitch['code'] == 'C':
+                        abs_px_lp = abs(last_pitch['px'])
+                        last_pitch['x_miss'] = max(abs_px_lp - HALF_STRIKE_ZONE, 0)
+                        if height_strike(last_pitch):
+                            last_pitch['y_miss'] = 0
+                        elif last_pitch['pz'] > (last_pitch['sz_top'] + BALL_RADIUS):
+                            last_pitch['y_miss'] = last_pitch['pz'] - last_pitch['sz_top'] - BALL_RADIUS
+                        else:
+                            last_pitch['y_miss'] = last_pitch['sz_bottom'] - BALL_RADIUS - last_pitch['pz']
+                        last_pitch['total_miss'] = math.sqrt(last_pitch['x_miss'] ** 2 + last_pitch['y_miss'] ** 2)
+                        last_pitch['total_miss_in'] = round(last_pitch['total_miss'] * 12, 2)
 
                 if not last_pitch['correct_call']:
                     if last_pitch['code'] == 'B':
