@@ -79,6 +79,159 @@ def strike(pitch):
     return width_strike(pitch) and height_strike(pitch)
 
 
+#%% Trajectory / plate-plane helpers
+
+# Home plate is 17" deep (front edge -> back tip) in the feed's convention:
+# pX/pZ are reported at the front edge (y = 17/12 ft). The "midline" is the
+# depth midpoint, halfway between the front edge and the back tip.
+PLATE_DEPTH_FT = 17.0 / 12
+FRONT_PLANE_Y = PLATE_DEPTH_FT
+MID_PLANE_Y = PLATE_DEPTH_FT / 2
+
+# Keys of the 9-param constant-accel model in pitchData.coordinates.
+TRAJ_KEYS = ['x0', 'y0', 'z0', 'vX0', 'vY0', 'vZ0', 'aX', 'aY', 'aZ']
+
+
+def extract_trajectory(coordinates):
+    """Return the 9 trajectory params from a pitchData.coordinates dict, or
+    None if any are missing (older feeds / bad data)."""
+    if not all(k in coordinates for k in TRAJ_KEYS):
+        return None
+    return {k: coordinates[k] for k in TRAJ_KEYS}
+
+
+def location_at_plane(params, y_plane):
+    """Solve the constant-accel trajectory for the (px, pz) where the ball
+    crosses y = y_plane (ft). Returns (None, None) if it never reaches the
+    plane (non-positive discriminant / no positive root)."""
+    aY, vY0, y0 = params['aY'], params['vY0'], params['y0']
+    a = 0.5 * aY
+    if a == 0:
+        return (None, None)
+    disc = vY0 ** 2 - 4 * a * (y0 - y_plane)
+    if disc < 0:
+        return (None, None)
+    root = math.sqrt(disc)
+    candidates = [t for t in ((-vY0 - root) / (2 * a), (-vY0 + root) / (2 * a)) if t > 0]
+    if not candidates:
+        return (None, None)
+    t = min(candidates)
+    px = params['x0'] + params['vX0'] * t + 0.5 * params['aX'] * t ** 2
+    pz = params['z0'] + params['vZ0'] * t + 0.5 * params['aZ'] * t ** 2
+    return (px, pz)
+
+
+def location_metrics(px, pz, sz_top, sz_bottom, code, overturned=False):
+    """Correctness + miss distances for a called pitch at an arbitrary (px, pz),
+    replicating the original updater rules so it is plane-agnostic:
+      - called strikes ('C'): x_miss/y_miss always computed; total_miss only on
+        an incorrect call.
+      - called balls ('B'): only correct_call is meaningful (misses left None).
+    ABS overturns force the call incorrect regardless of geometry.
+    Returns (correct_call, x_miss, y_miss, total_miss, total_miss_in)."""
+    abs_px = abs(px)
+    is_width = abs_px < HALF_STRIKE_ZONE
+    is_height = (pz < sz_top + BALL_RADIUS) and (pz > sz_bottom - BALL_RADIUS)
+    is_strike = is_width and is_height
+
+    if code != 'C':  # 'B'
+        correct = not is_strike
+        if overturned and correct:
+            correct = False
+        return (correct, None, None, None, None)
+
+    correct = is_strike
+    x_miss = 0 if is_width else abs_px - HALF_STRIKE_ZONE
+    if is_height:
+        y_miss = 0
+    elif pz > (sz_top + BALL_RADIUS):
+        y_miss = pz - sz_top - BALL_RADIUS
+    else:
+        y_miss = sz_bottom - BALL_RADIUS - pz
+
+    if overturned and correct:
+        correct = False
+        x_miss = max(abs_px - HALF_STRIKE_ZONE, 0)
+
+    if not correct:
+        total_miss = math.sqrt(x_miss ** 2 + y_miss ** 2)
+        total_miss_in = round(total_miss * 12, 2)
+    else:
+        total_miss = None
+        total_miss_in = None
+    return (correct, x_miss, y_miss, total_miss, total_miss_in)
+
+
+def set_trajectory(pitch, coordinates):
+    """Store the raw trajectory params and the derived midline (px_mid/pz_mid)
+    on the pitch dict. Falls back to the front-of-plate coords when the feed
+    has no trajectory or the plane solve fails."""
+    params = extract_trajectory(coordinates)
+    if params:
+        pitch['traj_x0'] = params['x0']
+        pitch['traj_y0'] = params['y0']
+        pitch['traj_z0'] = params['z0']
+        pitch['traj_vx0'] = params['vX0']
+        pitch['traj_vy0'] = params['vY0']
+        pitch['traj_vz0'] = params['vZ0']
+        pitch['traj_ax'] = params['aX']
+        pitch['traj_ay'] = params['aY']
+        pitch['traj_az'] = params['aZ']
+        px_mid, pz_mid = location_at_plane(params, MID_PLANE_Y)
+    else:
+        px_mid, pz_mid = (None, None)
+    if px_mid is None:
+        px_mid, pz_mid = pitch['px'], pitch['pz']
+    pitch['px_mid'] = px_mid
+    pitch['pz_mid'] = pz_mid
+
+
+def _apply_benefit_flags(pitch, inning_half):
+    """Set benefit / blown-call / possible_bad_data flags from the PRIMARY
+    correct_call (mirrors the original rules; possible_bad_data only on 'C')."""
+    if pitch['correct_call'] == False:
+        if pitch['code'] == 'B':
+            pitch['home_away_benefit'] = "away" if inning_half == "top" else "home"
+            pitch['player_type_benefit'] = 'batter'
+            pitch['blown_walk'] = pitch['balls'] == 3
+        if pitch['code'] == 'C':
+            pitch['home_away_benefit'] = "home" if inning_half == "top" else "away"
+            pitch['player_type_benefit'] = 'pitcher'
+            pitch['blown_strikeout'] = pitch['strikes'] == 2
+            pitch['possible_bad_data'] = (pitch.get('total_miss_in') or 0) > 7
+
+
+def assign_call_metrics(pitch, pitch_start_time, inning_half):
+    """Compute the front-of-plate metrics (*_front) plus the primary metrics.
+    The primary uses the midline location for 2026+ games (when a trajectory
+    was available), and the front-of-plate location otherwise. Requires
+    set_trajectory() to have run first (px_mid/pz_mid + traj_* present)."""
+    overturned = pitch.get('abs_challenge_overturned', False)
+    code = pitch['code']
+    sz_top, sz_bottom = pitch['sz_top'], pitch['sz_bottom']
+
+    fc, fx, fy, ft, fti = location_metrics(
+        pitch['px'], pitch['pz'], sz_top, sz_bottom, code, overturned)
+    pitch['correct_call_front'] = fc
+    pitch['x_miss_front'] = fx
+    pitch['y_miss_front'] = fy
+    pitch['total_miss_front'] = ft
+    pitch['total_miss_in_front'] = fti
+
+    has_traj = pitch.get('traj_x0') is not None
+    if pitch_start_time.year >= 2026 and has_traj:
+        pc, px_, py_, pt, pti = location_metrics(
+            pitch['px_mid'], pitch['pz_mid'], sz_top, sz_bottom, code, overturned)
+    else:
+        pc, px_, py_, pt, pti = fc, fx, fy, ft, fti
+    pitch['correct_call'] = pc
+    pitch['x_miss'] = px_
+    pitch['y_miss'] = py_
+    pitch['total_miss'] = pt
+    pitch['total_miss_in'] = pti
+
+    _apply_benefit_flags(pitch, inning_half)
+
 
 #%% Convert Timedelta
 
@@ -271,58 +424,9 @@ def add_pitches(game_data):
                 if pitch['abs_challenge_overturned']:
                     pitch['code'] = 'C' if pitch['code'] == 'B' else 'B'
 
-            abs_px = abs(pitch['px'])
-            
-            if pitch['code'] == 'C':
-                pitch['correct_call'] = strike(pitch)
-                
-                if width_strike(pitch):
-                    pitch['x_miss'] = 0
-                else:
-                    pitch['x_miss'] = abs_px - HALF_STRIKE_ZONE
-                    
-                if height_strike(pitch):
-                    pitch['y_miss'] = 0
-                elif pitch['pz'] > (pitch['sz_top'] + BALL_RADIUS):
-                    pitch['y_miss'] = pitch['pz'] - pitch['sz_top'] - BALL_RADIUS
-                else:
-                    pitch['y_miss'] = pitch['sz_bottom'] - BALL_RADIUS - pitch['pz']
-                    
-                if pitch['correct_call'] == False:
-                    pitch['total_miss'] = math.sqrt(pitch['x_miss'] ** 2 + pitch['y_miss'] ** 2)
-                    pitch['total_miss_in'] = round(pitch['total_miss'] * 12, 2)
-                                   
-            if pitch['code'] == 'B':
-                pitch['correct_call'] = not strike(pitch)
+            set_trajectory(pitch, row['coordinates'])
+            assign_call_metrics(pitch, pitch_start_time, inning_half)
 
-            # ABS is the authority: if overturned, the umpire was wrong regardless
-            # of our zone geometry (which includes ball radius that ABS may not use).
-            if pitch.get('abs_challenge_overturned') and pitch['correct_call']:
-                pitch['correct_call'] = False
-                if pitch['code'] == 'C':
-                    pitch['x_miss'] = max(abs_px - HALF_STRIKE_ZONE, 0)
-                    if height_strike(pitch):
-                        pitch['y_miss'] = 0
-                    elif pitch['pz'] > (pitch['sz_top'] + BALL_RADIUS):
-                        pitch['y_miss'] = pitch['pz'] - pitch['sz_top'] - BALL_RADIUS
-                    else:
-                        pitch['y_miss'] = pitch['sz_bottom'] - BALL_RADIUS - pitch['pz']
-                    pitch['total_miss'] = math.sqrt(pitch['x_miss'] ** 2 + pitch['y_miss'] ** 2)
-                    pitch['total_miss_in'] = round(pitch['total_miss'] * 12, 2)
-
-            if pitch['correct_call'] == False:
-                    
-                if pitch['code'] == 'B':
-                    pitch['home_away_benefit'] = "away" if inning_half == "top" else "home"
-                    pitch['player_type_benefit'] = 'batter'
-                    pitch['blown_walk'] = True if pitch['balls'] == 3 else False 
-                
-                if pitch['code'] == 'C':
-                    pitch['home_away_benefit'] = "home" if inning_half == "top" else "away"
-                    pitch['player_type_benefit'] = 'pitcher'
-                    pitch['blown_strikeout'] = True if pitch['strikes'] == 2 else False 
-                    pitch['possible_bad_data'] = pitch['total_miss_in'] > 7
-            
             game_pitches.append(pitch)
 
         # Fill missing ABS challenge data from play-level reviewDetails.
@@ -341,48 +445,10 @@ def add_pitches(game_data):
                 if last_pitch['abs_challenge_overturned']:
                     last_pitch['code'] = 'C' if last_pitch['code'] == 'B' else 'B'
 
-                # Recalculate correctness and miss distances with updated code
-                abs_px = abs(last_pitch['px'])
-                if last_pitch['code'] == 'C':
-                    last_pitch['correct_call'] = strike(last_pitch)
-                    last_pitch['x_miss'] = 0 if width_strike(last_pitch) else abs_px - HALF_STRIKE_ZONE
-                    if height_strike(last_pitch):
-                        last_pitch['y_miss'] = 0
-                    elif last_pitch['pz'] > (last_pitch['sz_top'] + BALL_RADIUS):
-                        last_pitch['y_miss'] = last_pitch['pz'] - last_pitch['sz_top'] - BALL_RADIUS
-                    else:
-                        last_pitch['y_miss'] = last_pitch['sz_bottom'] - BALL_RADIUS - last_pitch['pz']
-                    if not last_pitch['correct_call']:
-                        last_pitch['total_miss'] = math.sqrt(last_pitch['x_miss'] ** 2 + last_pitch['y_miss'] ** 2)
-                        last_pitch['total_miss_in'] = round(last_pitch['total_miss'] * 12, 2)
-                elif last_pitch['code'] == 'B':
-                    last_pitch['correct_call'] = not strike(last_pitch)
-
-                # ABS is the authority: if overturned, the umpire was wrong regardless
-                if last_pitch.get('abs_challenge_overturned') and last_pitch['correct_call']:
-                    last_pitch['correct_call'] = False
-                    if last_pitch['code'] == 'C':
-                        abs_px_lp = abs(last_pitch['px'])
-                        last_pitch['x_miss'] = max(abs_px_lp - HALF_STRIKE_ZONE, 0)
-                        if height_strike(last_pitch):
-                            last_pitch['y_miss'] = 0
-                        elif last_pitch['pz'] > (last_pitch['sz_top'] + BALL_RADIUS):
-                            last_pitch['y_miss'] = last_pitch['pz'] - last_pitch['sz_top'] - BALL_RADIUS
-                        else:
-                            last_pitch['y_miss'] = last_pitch['sz_bottom'] - BALL_RADIUS - last_pitch['pz']
-                        last_pitch['total_miss'] = math.sqrt(last_pitch['x_miss'] ** 2 + last_pitch['y_miss'] ** 2)
-                        last_pitch['total_miss_in'] = round(last_pitch['total_miss'] * 12, 2)
-
-                if not last_pitch['correct_call']:
-                    if last_pitch['code'] == 'B':
-                        last_pitch['home_away_benefit'] = "away" if inning_half == "top" else "home"
-                        last_pitch['player_type_benefit'] = 'batter'
-                        last_pitch['blown_walk'] = last_pitch['balls'] == 3
-                    elif last_pitch['code'] == 'C':
-                        last_pitch['home_away_benefit'] = "home" if inning_half == "top" else "away"
-                        last_pitch['player_type_benefit'] = 'pitcher'
-                        last_pitch['blown_strikeout'] = last_pitch['strikes'] == 2
-                        last_pitch['possible_bad_data'] = last_pitch.get('total_miss_in', 0) > 7
+                # Recalculate correctness and miss distances (front + midline)
+                # with the updated code. Trajectory was already set on the
+                # main path, so px_mid/pz_mid are present.
+                assign_call_metrics(last_pitch, last_pitch['datetime_start'], inning_half)
 
     game_pitch_data = {'game_pitches': game_pitches, 'game_ejections': game_ejections, 'game_media': game_media}
     return game_pitch_data
