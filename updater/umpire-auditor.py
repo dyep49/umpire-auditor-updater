@@ -94,8 +94,9 @@ TRAJ_KEYS = ['x0', 'y0', 'z0', 'vX0', 'vY0', 'vZ0', 'aX', 'aY', 'aZ']
 
 def extract_trajectory(coordinates):
     """Return the 9 trajectory params from a pitchData.coordinates dict, or
-    None if any are missing (older feeds / bad data)."""
-    if not all(k in coordinates for k in TRAJ_KEYS):
+    None if any are missing OR null (older feeds / bad data). A null value
+    would otherwise blow up the arithmetic in location_at_plane()."""
+    if any(coordinates.get(k) is None for k in TRAJ_KEYS):
         return None
     return {k: coordinates[k] for k in TRAJ_KEYS}
 
@@ -188,7 +189,18 @@ def set_trajectory(pitch, coordinates):
 
 def _apply_benefit_flags(pitch, inning_half):
     """Set benefit / blown-call / possible_bad_data flags from the PRIMARY
-    correct_call (mirrors the original rules; possible_bad_data only on 'C')."""
+    correct_call (possible_bad_data only on 'C'). Reset to dataclass defaults
+    first so a re-score (e.g. after a play-level ABS code flip) cannot leave
+    stale flags from the first scoring pass."""
+    pitch['home_away_benefit'] = None
+    pitch['player_type_benefit'] = None
+    pitch['team_benefit'] = None
+    pitch['team_benefit_id'] = None
+    pitch['team_hurt'] = None
+    pitch['team_hurt_id'] = None
+    pitch['blown_walk'] = False
+    pitch['blown_strikeout'] = False
+    pitch['possible_bad_data'] = False
     if pitch['correct_call'] == False:
         if pitch['code'] == 'B':
             pitch['home_away_benefit'] = "away" if inning_half == "top" else "home"
