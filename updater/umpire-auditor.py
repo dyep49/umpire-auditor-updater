@@ -848,6 +848,12 @@ def add_game_to_db(game_id):
             cur.execute(db_ejection_query)
 
 #%% Cull ghost pitches
+    # Skip culling when this run parsed no pitches: an empty df_pitches has no
+    # 'id' column (KeyError), and a transient feed gap (e.g. Statcast tracking
+    # temporarily missing) must not delete previously-stored good rows.
+    if len(df_pitches) == 0:
+        return
+
     with psycopg.connect(conn_string, autocommit=True) as conn:
         cur = conn.cursor()
         cur.execute('SELECT id from pitch WHERE game_id=' + str(game_id))
