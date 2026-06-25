@@ -44,18 +44,18 @@ conn_string = os.environ['DB_URL']
 def dataclass_upsert_query(table_name, rows, dc):
     dc_fields = [field.name for field in dataclasses.fields(dc)]
     dc_values = [row.get_values() for row in rows]
-    
+
     db_table = Table(table_name)
-      
+
     q = PostgreSQLQuery.into(db_table)\
         .columns(*dc_fields)\
         .insert(*dc_values)\
         .on_conflict('id')
-        
+
     for i, field in enumerate(dc_fields):
         q = q.do_update(field, dc_values[0][i])
-    
-      
+
+
     return str(q)
 
 #%% Constants
@@ -249,18 +249,18 @@ def assign_call_metrics(pitch, pitch_start_time, inning_half):
 
 def convert_timedelta(duration):
     total_seconds = duration.total_seconds()
-    
+
     # Occasional bugs in the API where the date is wrong
     if (total_seconds > 86400 or total_seconds < 0):
         return None
-    
+
     milliseconds = int(total_seconds % 1 * 100)
     seconds = f"{int(total_seconds % 60):02d}"
     minutes = f"{int((total_seconds % 3600) // 60):02d}"
     hours = f"{int(total_seconds // 3600):02d}"
-        
+
     return '{}:{}:{}.{}'.format(hours, minutes, seconds, milliseconds)
-    
+
 #%% Game Start Time
 
 def game_start_time(media_id):
@@ -275,11 +275,11 @@ def game_start_time(media_id):
             }
         }
     }"""
-    
+
     variables = {'ids': media_id}
     res = requests.post(url, json={'query': query, 'variables': variables})
     mediaInfo = res.json()["data"]["mediaInfo"]
-    
+
     try:
         milestones = mediaInfo[0]["milestones"]
         broadcast_start = [milestone["absoluteTime"] for milestone in milestones if milestone["milestoneType"] == "BROADCAST_START"]
@@ -292,7 +292,7 @@ def game_start_time(media_id):
 def add_pitches(game_data):
     game_pitches = []
     game_ejections = []
-    
+
     all_plays = game_data['allPlays']
     start_time_home = game_data['start_time_home']
     start_time_away = game_data['start_time_away']
@@ -380,10 +380,10 @@ def add_pitches(game_data):
         for i, row in enumerate(pitches_data):
 #             if codes[i] == 'X' or codes[i] == 'V' or codes[i] == '*B':
 #                 continue
-                
+
             if codes[i] != 'B' and codes[i] != 'C':
                 continue
-            
+
             if not 'pX' in row['coordinates']:
                 continue
 
@@ -404,7 +404,7 @@ def add_pitches(game_data):
                 "strikes": counts[i]['strikes'],
                 'balls': counts[i]['balls'],
                 'datetime_start': pitch_start_time,
-                'timestamp_start_home': convert_timedelta(start_times[i] - start_time_home) if start_time_home else None,  
+                'timestamp_start_home': convert_timedelta(start_times[i] - start_time_home) if start_time_home else None,
                 'timestamp_start_away': convert_timedelta(start_times[i] - start_time_away) if start_time_away else None,
                 'start_seconds_home': (start_times[i] - start_time_home).seconds if start_time_home else None,
                 'start_seconds_away': (start_times[i] - start_time_away).seconds if start_time_away else None,
@@ -470,7 +470,7 @@ def add_pitches(game_data):
 def get_hp_umpire(official):
     if (official['officialType'] == 'Home Plate'):
         return True
-    else: 
+    else:
         return False
 
 #%% Parse Player Data
@@ -478,7 +478,7 @@ def get_hp_umpire(official):
 def parse_player_data(player_data):
     if (player_data['isPlayer'] == False and 'batSide' not in player_data):
         return
-    else:    
+    else:
         return Player(id = player_data['id'], name = player_data['fullName'])
 
 #%% Add Game Data
@@ -492,9 +492,9 @@ def add_game_data(pitch, game_data):
     pitch['home_team_id'] = game_data['home_team_id']
     pitch['away_team_id'] = game_data['away_team_id']
     pitch['game_date'] = game_data['game_date']
-    
+
     if pitch['correct_call'] != True:
-    
+
         if pitch['home_away_benefit'] == 'home':
             pitch['team_benefit'] = game_data['home_team']
             pitch['team_benefit_id'] = game_data['home_team_id']
@@ -505,7 +505,7 @@ def add_game_data(pitch, game_data):
             pitch['team_benefit_id'] = game_data['away_team_id']
             pitch['team_hurt'] = game_data['home_team']
             pitch['team_hurt_id'] = game_data['home_team_id']
-    
+
     return Pitch(**pitch)
 
 #%% Add Ejection Data
@@ -519,12 +519,12 @@ def add_game_ejection_data(ejection, game_data):
     ejection['home_team_id'] = game_data['home_team_id']
     ejection['away_team_id'] = game_data['away_team_id']
     ejection['game_date'] = game_data['game_date']
-    
+
     return Ejection(**ejection)
-    
+
 #%%
 def add_game_to_db(game_id):
-    
+
 #%%%
 
     game_data = statsapi.get('game', {'gamePk': game_id})
@@ -534,21 +534,21 @@ def add_game_to_db(game_id):
     # Regular, Wildcard, Divisional, League, WS
     if game_data['gameData']['game']['type'] not in ['R', 'F', 'D', 'L', 'W']:
         return
-    
+
     officials = game_data['liveData']['boxscore']['officials']
-    
+
     # This happens on rainouts
     if len(officials) == 0:
         return
-    
+
     hp_umpire = next(filter(get_hp_umpire, officials))['official']
     hp_umpire_name = hp_umpire['fullName']
     hp_umpire_id = hp_umpire['id']
-    
+
     umpire_obj = Umpire(id = hp_umpire_id, name = hp_umpire_name)
-    
+
     db_umpire_query = dataclass_upsert_query('umpire', [umpire_obj], Umpire)
-    
+
     with psycopg.connect(conn_string, autocommit=True) as conn:
         cur = conn.cursor()
         cur.execute(db_umpire_query)
@@ -558,39 +558,39 @@ def add_game_to_db(game_id):
 
     team_data = game_data['gameData']['teams']
 
-    
+
     away_team = team_data['away']
     away_team_abbreviation = away_team['abbreviation']
     away_team_name = away_team['name']
     away_team_id = away_team['id']
-    
+
     away_team_obj = Team(
         id = away_team_id,
         name = away_team_name,
         abbreviation = away_team_abbreviation)
-    
+
     home_team = team_data['home']
     home_team_abbreviation = home_team['abbreviation']
     home_team_name = home_team['name']
     home_team_id = home_team['id']
-    
+
     home_team_obj = Team(
         id = home_team_id,
         name = home_team_name,
         abbreviation = home_team_abbreviation)
-    
+
     # db_team_query = dataclass_upsert_query('teams', [away_team_obj, home_team_obj], Team)
-    
+
     db_home_query = dataclass_upsert_query('team', [home_team_obj], Team)
     db_away_query = dataclass_upsert_query('team', [away_team_obj], Team)
-    
+
     with psycopg.connect(conn_string, autocommit=True) as conn:
         cur = conn.cursor()
         # cur.execute(db_team_query)
         cur.execute(db_home_query)
         cur.execute(db_away_query)
 
-       
+
 #%%% Game
 
     game_date = game_data['gameData']['datetime']['officialDate']
@@ -600,14 +600,14 @@ def add_game_to_db(game_id):
 
     game_players = game_data['gameData']['players']
     player_rows = list(map(parse_player_data, [*game_players.values()]))
-    
+
     player_queries = []
 
     for player_obj in player_rows:
         player_queries.append(dataclass_upsert_query('player', [player_obj], Player))
-    
+
     db_player_query = ';'.join(player_queries)
-    
+
     with psycopg.connect(conn_string, autocommit=True) as conn:
         cur = conn.cursor()
         cur.execute(db_player_query)
@@ -616,7 +616,7 @@ def add_game_to_db(game_id):
 #%%% ADD PITCHES
 
     play_data = game_data['liveData']['plays']
-    
+
     ## GATHER MLB.TV BROADCAST DATA XXX THIS SHOULD MAYBE GO INTO GAME TABLE AS WELL
     content = statsapi.get('game_content', {'gamePk': game_id})
 
@@ -625,7 +625,7 @@ def add_game_to_db(game_id):
     else:
         content_items = []
 
-    
+
     media_url = f'https://mastapi.mobile.mlbinfra.com/api/epg/v3/search?exp=MLB&gamePk={game_id}'
     media_request = requests.get(media_url)
     media_response = media_request.json()
@@ -636,7 +636,7 @@ def add_game_to_db(game_id):
         second_item = content_items[1]
         home_feed_id = first_item["contentId"] if first_item["mediaFeedType"] == "HOME" else second_item["contentId"]
         away_feed_id = first_item["contentId"] if first_item["mediaFeedType"] == "AWAY" else second_item["contentId"]
-    
+
     elif (len(content_items) == 1):
         home_feed_id = content_items[0]["contentId"]
         away_feed_id = content_items[0]["contentId"]
@@ -713,7 +713,7 @@ def add_game_to_db(game_id):
     for event in all_events:
         if 'isSubstitution' in event and event['position']['name'] == 'Catcher':
             catcher_subs.append(event)
-    
+
     def gen_catcher_interval(starting_id, player_ids, subs):
         catcher_interval = P.IntervalDict()
         catcher_interval[P.closed(datetime.min, datetime.max)] = starting_id
@@ -726,14 +726,14 @@ def add_game_to_db(game_id):
                 catcher_interval[P.closed(start_datetime, datetime.max)] = catcher_sub_id
 
         return catcher_interval
-        
+
     play_data['home_catcher_interval'] = gen_catcher_interval(starting_home_catcher_id, home_player_ids, catcher_subs)
     play_data['away_catcher_interval'] = gen_catcher_interval(starting_away_catcher_id, away_player_ids, catcher_subs)
 
     pitches_data = add_pitches(play_data)
-    
+
     pitch_rows = pitches_data['game_pitches']
-    
+
     pitch_game_data = {
         'umpire_id': hp_umpire_id,
         'umpire_name': hp_umpire_name,
@@ -744,31 +744,31 @@ def add_game_to_db(game_id):
         'away_team_id': away_team_id,
         'game_date': game_date
     }
-    
+
     pitch_list = list(map(lambda p: add_game_data(p, pitch_game_data), pitch_rows))
-    
+
     pitch_queries = []
-    
+
     for pitch_obj in pitch_list:
         pitch_queries.append(dataclass_upsert_query('pitch', [pitch_obj], Pitch))
-    
+
     db_pitch_query = ';'.join(pitch_queries)
-    
+
     ejection_rows = pitches_data['game_ejections']
     ejection_list = list(map(lambda p: add_game_ejection_data(p, pitch_game_data), ejection_rows))
-       
+
     ejection_queries = []
-    
+
     for ejection_obj in ejection_list:
         ejection_queries.append(dataclass_upsert_query('ejection', [ejection_obj], Ejection))
-    
+
     db_ejection_query = ';'.join(ejection_queries)
 
 #%%# Create Game
 
-    df_pitches = pd.DataFrame(pitch_list)   
+    df_pitches = pd.DataFrame(pitch_list)
     media_data = pitches_data['game_media']
-    
+
     # Games like the one at Tokyo Dome are regular season but have no pitch tracking
     if len(df_pitches) == 0:
         game_object = Game(
@@ -802,10 +802,10 @@ def add_game_to_db(game_id):
         correct_calls = df_pitches.loc[df_pitches['correct_call'] == True]
         total_calls = df_pitches.loc[df_pitches['correct_call'].isin([True, False])]
         correct_call_rate = (len(correct_calls) / len(total_calls)) * 100
-        
+
         calls_benefit_home = df_pitches.loc[df_pitches['home_away_benefit'] == 'home']
         calls_benefit_away = df_pitches.loc[df_pitches['home_away_benefit'] == 'away']
-        
+
         game_object = Game(
             id = game_id,
             home_team = home_team_abbreviation,
@@ -832,18 +832,18 @@ def add_game_to_db(game_id):
             first_pitch_start_seconds_home = media_data['first_pitch_start_seconds_home'],
             first_pitch_start_seconds_away = media_data['first_pitch_start_seconds_away'],
         )
-    
+
 
     db_game_query = dataclass_upsert_query('game', [game_object], Game)
-        
+
     with psycopg.connect(conn_string, autocommit=True) as conn:
         cur = conn.cursor()
         cur.execute(db_game_query)
-        
+
         if len(df_pitches) != 0:
             logger.debug("Upserting %s pitches", len(df_pitches))
             cur.execute(db_pitch_query)
-        
+
         if len(ejection_list) != 0:
             cur.execute(db_ejection_query)
 
@@ -852,7 +852,7 @@ def add_game_to_db(game_id):
         cur = conn.cursor()
         cur.execute('SELECT id from pitch WHERE game_id=' + str(game_id))
         db_ids = [r[0] for r in cur.fetchall()]
-	
+
         diff_play_ids = [id for id in db_ids if id not in df_pitches['id'].to_list()]
 
         if len(diff_play_ids) > 0:
