@@ -66,6 +66,28 @@ class Pitch:
     abs_challenge_overturned: bool = False
     abs_challenge_team_id: int = None
     abs_challenge_player_id: int = None
+    # Raw constant-accel trajectory params (feed pitchData.coordinates). Stored
+    # so any plate plane can be recomputed later without re-fetching the feed.
+    traj_x0: float = None
+    traj_y0: float = None
+    traj_z0: float = None
+    traj_vx0: float = None
+    traj_vy0: float = None
+    traj_vz0: float = None
+    traj_ax: float = None
+    traj_ay: float = None
+    traj_az: float = None
+    # Depth-midpoint ("midline", plate center) location, computed from the
+    # trajectory. px/pz remain the front-of-plate coordinates from the feed.
+    px_mid: float = None
+    pz_mid: float = None
+    # Front-of-plate calculation, preserved for comparison. From 2026 on the
+    # primary correct_call/*_miss columns are midline-based; these are front.
+    correct_call_front: bool = None
+    x_miss_front: float = None
+    y_miss_front: float = None
+    total_miss_front: float = None
+    total_miss_in_front: float = None
 
     def get_values(self):
         return tuple(vars(self).values())
